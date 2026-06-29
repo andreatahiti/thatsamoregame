@@ -369,7 +369,7 @@ function gameLoop() {
       addToQueue(c.pizza);
       c.elem.remove();
       customers = customers.filter(cc=>cc.id!==c.id);
-      if(c.id===0) { clearTimeout(spawnTimer); spawnTimer=setTimeout(spawnCustomer,500); }
+      if(c.id===0) { clearTimeout(spawnTimer); spawnTimer=setTimeout(spawnCustomer,3000); }
     }
   });
   queue.forEach(o => {
