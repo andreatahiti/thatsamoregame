@@ -320,13 +320,21 @@ function restartGame() {
   startGame();
 }
 
-function saveAndRestart() {
+async function saveAndRestart() {
   const name = (document.getElementById('player-name').value.trim()) || 'Anonyme';
-  const scores = loadScores();
-  scores.push({name, score, pizzas: pizzasServed});
-  scores.sort((a,b)=>b.score-a.score);
-  try { localStorage.setItem('ta_scores', JSON.stringify(scores.slice(0,10))); } catch(e) {}
-  renderLeaderboard();
+  try {
+    await fetch(SUPABASE_URL+'/rest/v1/scores', {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': 'Bearer '+SUPABASE_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({name, score, pizzas: pizzasServed})
+    });
+  } catch(e) { console.log('Save error:', e); }
+  await renderLeaderboard();
   restartGame();
 }
 
@@ -565,15 +573,25 @@ function updateScoreBar() {
   document.getElementById('queue-count').textContent=queue.length;
 }
 
-function loadScores() {
-  try{return JSON.parse(localStorage.getItem('ta_scores')||'[]');}catch(e){return [];}
+const SUPABASE_URL = 'https://qhkzctihsnwxnhjejzyx.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFoa3pjdGloc253eG5oamVqenl4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODI3MTk0NDIsImV4cCI6MjA5ODI5NTQ0Mn0.5zubo9PDNKPtVqAK_jY59xnTVMNlxx_1mKIFb2NFRKU';
+
+async function loadScores() {
+  try {
+    const res = await fetch(SUPABASE_URL+'/rest/v1/scores?order=score.desc&limit=10', {
+      headers: {'apikey': SUPABASE_KEY, 'Authorization': 'Bearer '+SUPABASE_KEY}
+    });
+    return await res.json();
+  } catch(e) { return []; }
 }
 
-function renderLeaderboard() {
-  const scores=loadScores();
+async function renderLeaderboard() {
   const table=document.getElementById('lb-table');
   table.querySelectorAll('.lb-row:not(.lb-header)').forEach(r=>r.remove());
-  if(scores.length===0){
+  const loading=document.createElement('div');loading.className='lb-empty';loading.textContent='Chargement...';table.appendChild(loading);
+  const scores = await loadScores();
+  table.querySelectorAll('.lb-row:not(.lb-header)').forEach(r=>r.remove());
+  if(!scores||scores.length===0){
     const e=document.createElement('div');e.className='lb-empty';e.textContent='Aucun score enregistre';table.appendChild(e);return;
   }
   const medals=['🥇','🥈','🥉'];
@@ -587,6 +605,9 @@ function renderLeaderboard() {
 }
 
 renderLeaderboard();
+
+// Refresh leaderboard every 30s
+setInterval(renderLeaderboard, 30000);
 </script>
 </body>
 </html>
