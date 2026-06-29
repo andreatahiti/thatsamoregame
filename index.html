@@ -586,10 +586,8 @@ async function loadScores() {
 }
 
 async function renderLeaderboard() {
-  const table=document.getElementById('lb-table');
-  table.querySelectorAll('.lb-row:not(.lb-header)').forEach(r=>r.remove());
-  const loading=document.createElement('div');loading.className='lb-empty';loading.textContent='Chargement...';table.appendChild(loading);
   const scores = await loadScores();
+  const table=document.getElementById('lb-table');
   table.querySelectorAll('.lb-row:not(.lb-header)').forEach(r=>r.remove());
   if(!scores||scores.length===0){
     const e=document.createElement('div');e.className='lb-empty';e.textContent='Aucun score enregistre';table.appendChild(e);return;
