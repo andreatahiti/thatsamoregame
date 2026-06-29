@@ -196,7 +196,7 @@
       <p style="font-size:1rem;font-weight:700;color:#c8102e;margin-top:12px;letter-spacing:2px;">🎟️ Code : IL MIGLIOR PIZZAIOLO</p>
     </div>
     <button class="ov-btn" onclick="takeScreenshot()" style="width:100%;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px;">📸 Screenshot</button>
-    <button class="ov-btn-sec" style="width:100%;" onclick="document.getElementById('prize-overlay').classList.remove('show');paused=false;">Continuer a jouer !</button>
+    <button class="ov-btn-sec" style="width:100%;" onclick="document.getElementById('prize-overlay').classList.remove('show');paused=false;startMusic();">Continuer a jouer !</button>
   </div>
 </div>
 
@@ -204,6 +204,201 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script>
+
+// ── MUSIC ENGINE ──────────────────────────────────────────────
+let audioCtx = null;
+let musicScheduler = null;
+let beatCount = 0;
+let melodyIdx = 0;
+let bassIdx = 0;
+let chordIdx = 0;
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+
+function playNote(freq, startTime, duration, vol=0.12, type='triangle', detune=0) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  const reverb = audioCtx.createGain();
+  osc.connect(gain); gain.connect(reverb); reverb.connect(audioCtx.destination);
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, startTime);
+  if (detune) osc.detune.setValueAtTime(detune, startTime);
+  gain.gain.setValueAtTime(0, startTime);
+  gain.gain.linearRampToValueAtTime(vol, startTime + 0.015);
+  gain.gain.setValueAtTime(vol, startTime + duration * 0.7);
+  gain.gain.linearRampToValueAtTime(0, startTime + duration);
+  reverb.gain.setValueAtTime(0.85, startTime);
+  osc.start(startTime);
+  osc.stop(startTime + duration + 0.05);
+}
+
+function playDrum(startTime, vol=0.12) {
+  if (!audioCtx) return;
+  const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.08), audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i/data.length, 3);
+  }
+  const src = audioCtx.createBufferSource();
+  const gain = audioCtx.createGain();
+  src.buffer = buf; src.connect(gain); gain.connect(audioCtx.destination);
+  gain.gain.setValueAtTime(vol, startTime);
+  src.start(startTime);
+}
+
+function playTambourine(startTime, vol=0.07) {
+  if (!audioCtx) return;
+  const buf = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.05), audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i/data.length, 6);
+  }
+  const src = audioCtx.createBufferSource();
+  const filter = audioCtx.createBiquadFilter();
+  const gain = audioCtx.createGain();
+  filter.type = 'highpass'; filter.frequency.value = 3000;
+  src.buffer = buf; src.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+  gain.gain.setValueAtTime(vol, startTime);
+  src.start(startTime);
+}
+
+// Funiculì Funiculà - Luigi Denza 1880 - exact melody
+const N = {
+  C3:130.8, D3:146.8, E3:164.8, F3:174.6, G3:196.0, A3:220.0, Bb3:233.1, B3:246.9,
+  C4:261.6, D4:293.7, E4:329.6, F4:349.2, G4:392.0, A4:440.0, Bb4:466.2, B4:493.9,
+  C5:523.3, D5:587.3, E5:659.3, F5:698.5, G5:784.0, A5:880.0,
+  Cs4:277.2, Ds4:311.1, Fs4:370.0, Gs4:415.3,
+};
+
+// Funiculì Funiculà - verse + chorus exact transcription in C major
+const MELODY = [
+  // VERSE: "Aisseme, aisseme, andiamo..."
+  [N.E4,0.5],[N.E4,0.25],[N.E4,0.25],[N.E4,0.5],[N.E4,0.5],
+  [N.E4,0.5],[N.G4,0.5],[N.C4,0.5],[N.D4,0.5],
+  [N.E4,1.0],[N.E4,0.5],[N.E4,0.5],
+  [N.E4,0.5],[N.F4,0.25],[N.E4,0.25],[N.D4,0.5],[N.C4,0.5],
+  [N.D4,1.0],[N.D4,0.5],[N.D4,0.5],
+  [N.D4,0.5],[N.E4,0.25],[N.D4,0.25],[N.C4,0.5],[N.B3,0.5],
+  [N.C4,1.0],[N.C4,0.5],[N.C4,0.5],
+  [N.C4,0.5],[N.D4,0.25],[N.C4,0.25],[N.B3,0.5],[N.A3,0.5],
+
+  // "Jamme, jamme 'ncoppa jamme ja..."
+  [N.G4,0.5],[N.G4,0.25],[N.G4,0.25],[N.G4,0.5],[N.G4,0.5],
+  [N.G4,0.5],[N.A4,0.5],[N.G4,0.5],[N.F4,0.5],
+  [N.E4,1.0],[N.E4,0.5],[N.E4,0.5],
+  [N.F4,0.5],[N.E4,0.25],[N.D4,0.25],[N.E4,0.5],[N.D4,0.5],
+
+  // CHORUS: "Funiculì funiculà!"
+  [N.C4,0.5],[N.E4,0.5],[N.G4,0.5],[N.C5,0.5],
+  [N.C5,0.5],[N.B4,0.25],[N.A4,0.25],[N.G4,0.5],[N.E4,0.5],
+  [N.G4,0.5],[N.F4,0.25],[N.E4,0.25],[N.D4,0.5],[N.C4,0.5],
+  [N.E4,1.0],[N.E4,0.5],[N.E4,0.5],
+
+  // "Funiculì funiculà!"
+  [N.A4,0.5],[N.A4,0.25],[N.A4,0.25],[N.A4,0.5],[N.A4,0.5],
+  [N.A4,0.5],[N.G4,0.5],[N.F4,0.5],[N.E4,0.5],
+  [N.G4,0.5],[N.F4,0.25],[N.E4,0.25],[N.D4,0.5],[N.C4,0.5],
+  [N.C4,1.5],
+];
+
+// Accordion-style chords (left hand)
+const CHORDS = [
+  [[N.C3,N.G3],[1.0]],   // C major
+  [[N.C3,N.G3],[1.0]],
+  [[N.G3,N.D4],[1.0]],   // G
+  [[N.G3,N.D4],[1.0]],
+  [[N.F3,N.C4],[1.0]],   // F
+  [[N.F3,N.C4],[1.0]],
+  [[N.G3,N.D4],[1.0]],   // G
+  [[N.G3,N.D4],[1.0]],
+];
+
+// Walking bass
+const BASS = [
+  [N.C3,1.0],[N.C3,0.5],[N.G3,0.5],
+  [N.G3,1.0],[N.G3,0.5],[N.D4,0.5],
+  [N.F3,1.0],[N.F3,0.5],[N.C4,0.5],
+  [N.G3,1.0],[N.G3,1.0],
+];
+
+let bassIdx2 = 0;
+
+function getBPM() {
+  return Math.min(240, 130 + (level-1)*12 + pizzasServed*3);
+}
+
+function scheduleMusic() {
+  if (!audioCtx || !gameRunning || paused) return;
+  const bpm = getBPM();
+  const beat = 60 / bpm;
+  const now = audioCtx.currentTime;
+
+  // Melody
+  const [mFreq, mDur] = MELODY[melodyIdx % MELODY.length];
+  playNote(mFreq, now, beat * mDur * 0.88, 0.13, 'triangle');
+  melodyIdx++;
+
+  // Accordion chord every 3 beats (6/8 feel)
+  if (beatCount % 3 === 0) {
+    const [freqs] = CHORDS[chordIdx % CHORDS.length];
+    freqs.forEach((f,i) => playNote(f, now, beat*1.8, 0.05, 'sawtooth', i*5));
+    chordIdx++;
+  }
+
+  // Bass every 2 beats
+  if (beatCount % 2 === 0) {
+    const [bFreq, bDur] = BASS[bassIdx2 % BASS.length];
+    playNote(bFreq, now, beat * bDur * 1.6, 0.09, 'sawtooth');
+    bassIdx2++;
+  }
+
+  // Tambourine on every beat
+  playTambourine(now, 0.08);
+
+  // Strong drum on beat 1 and 4 of 6
+  if (beatCount % 6 === 0) playDrum(now, 0.15);
+  if (beatCount % 6 === 3) playDrum(now, 0.09);
+
+  beatCount++;
+  musicScheduler = setTimeout(scheduleMusic, beat * 960);
+}
+
+function startMusic() {
+  initAudio();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  if (musicScheduler) clearTimeout(musicScheduler);
+  beatCount = 0; melodyIdx = 0; bassIdx2 = 0; chordIdx = 0;
+  scheduleMusic();
+}
+
+function stopMusic() {
+  if (musicScheduler) { clearTimeout(musicScheduler); musicScheduler = null; }
+}
+
+function playSuccessSound() {
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  [N.C5,N.E5,N.G5,N.C5].forEach((f,i) => playNote(f, now+i*0.07, 0.25, 0.18, 'triangle'));
+}
+
+function playFailSound() {
+  if (!audioCtx) return;
+  const now = audioCtx.currentTime;
+  playNote(N.Bb4, now, 0.15, 0.15, 'sawtooth');
+  playNote(N.G3, now+0.12, 0.25, 0.15, 'sawtooth');
+}
+
+function playGameOverSound() {
+  if (!audioCtx) return;
+  stopMusic();
+  const now = audioCtx.currentTime;
+  [N.G4,N.F4,N.E4,N.D4,N.C4].forEach((f,i) => playNote(f, now+i*0.22, 0.35, 0.18, 'sawtooth'));
+}
+// ── END MUSIC ──────────────────────────────────────────────────
+
 const PIZZAS = [
   { name:"Margherita", cat:"Classica", emoji:"🍕", ing:["sauce tomate","mozzarella","parmigiano","basilic"] },
   { name:"Prosciutto e Funghi", cat:"Classica", emoji:"🍕", ing:["sauce tomate","mozzarella","jambon cuit","creme de champignons"] },
@@ -310,6 +505,7 @@ function startGame() {
   renderActive();
   scheduleNext(true);
   gameLoopInterval = setInterval(gameLoop, 16);
+  startMusic();
 }
 
 function restartGame() {
@@ -352,7 +548,7 @@ function spawnCustomer() {
   const street = document.getElementById('street');
   const elem = document.createElement('div');
   elem.className = 'customer';
-  elem.style.left = (id===0 ? '10%' : '105%');
+  const startX = id===0?10:105; elem.style.left = startX+'%';
   elem.innerHTML = '<div class="customer-body">'+emoji+'</div><div class="customer-bubble">'+pizza.name+'</div>';
   street.appendChild(elem);
   customers.push({id, x: id===0?10:105, pizza, elem});
@@ -369,7 +565,7 @@ function gameLoop() {
       addToQueue(c.pizza);
       c.elem.remove();
       customers = customers.filter(cc=>cc.id!==c.id);
-      if(c.id===0) { clearTimeout(spawnTimer); spawnTimer=setTimeout(spawnCustomer,3000); }
+      if(c.id===0) { clearTimeout(spawnTimer); spawnTimer=setTimeout(spawnCustomer,200); }
     }
   });
   queue.forEach(o => {
@@ -402,6 +598,7 @@ function triggerGameOver() {
   document.getElementById('go-score').textContent=score;
   document.getElementById('go-pizzas').textContent=pizzasServed;
   document.getElementById('player-name').value='';
+  playGameOverSound();
   document.getElementById('gameover-overlay').classList.add('show');
 }
 
@@ -523,14 +720,14 @@ function validatePizza() {
     speedMultiplier=1.0+pizzasServed*0.05;
     level=Math.min(10,1+Math.floor(score/500));
     if(score>=5000&&!prizeShown){prizeShown=true;setTimeout(showPrize,800);}
-    flash('+'+pts+' 🎉');
+    flash('+'+pts+' 🎉'); playSuccessSound();
     queue=queue.filter(o=>o.id!==activeOrderId);
     activeOrderId=null; myIngredients=[];
     resetBtns(); renderQueue(); renderActive(); updateScoreBar();
     showResult(true,order.pizza,missing,extra,pts);
   } else {
     score=Math.max(0,score-30); streak=0;
-    flash('❌ -30'); updateScoreBar();
+    flash('❌ -30'); playFailSound(); updateScoreBar();
     showResult(false,order.pizza,missing,extra,0);
   }
 }
@@ -551,6 +748,7 @@ function closeResult() {document.getElementById('result-overlay').classList.remo
 
 function showPrize() {
   paused = true;
+  stopMusic();
   document.getElementById('prize-overlay').classList.add('show');
 }
 
